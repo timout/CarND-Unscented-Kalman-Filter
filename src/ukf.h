@@ -40,10 +40,29 @@ private:
   const int n_x_ = {5};
 
   ///* Augmented state dimension
-  const int n_aug_ = {7};
+  const int n_aug_ = { 7 };
+
+  //* sigma points dimension
+  const int n_aug_size = { 2 * n_aug_ + 1 };
 
   ///* Sigma point spreading parameter
   const double lambda_ =  {static_cast<double>(3 - n_x_)};
+
+  //lidar measurement dimension, lidar can measure px and py
+  const int laser_dim = 2;
+  // Laser R 
+  MatrixXd laser_R = { MatrixXd(laser_dim, laser_dim) };
+  
+  //radar measurement dimension, radar can measure r, phi, and r_dot
+  const int radar_dim = 3;
+  // Radar R
+  MatrixXd radar_R = { MatrixXd(radar_dim, radar_dim) };
+
+  // Pred Q
+  MatrixXd pred_Q = { MatrixXd(2,2) };
+
+  ///* Weights of sigma points
+  VectorXd weights_ = { VectorXd(n_aug_size) };
 
   ///* time when the state is true, in us
   long long time_us_ = {-1};
@@ -51,13 +70,13 @@ private:
   // Calculate delta_t, store current time for future
   double delta_t;
 
-public:
-
   ///* if this is false, laser measurements will be ignored (except for init)
   bool use_laser_;
 
   ///* if this is false, radar measurements will be ignored (except for init)
   bool use_radar_;
+
+public:
 
   ///* state vector: [pos1 pos2 vel_abs yaw_angle yaw_rate] in SI units and rad
   VectorXd x_;
@@ -68,14 +87,11 @@ public:
   ///* predicted sigma points matrix
   MatrixXd Xsig_pred_;
 
-  ///* Weights of sigma points
-  VectorXd weights_;
-
   ///* the current NIS for radar
-  //double NIS_radar_;
+  double NIS_radar_ = {0};
 
   ///* the current NIS for laser
-  //double NIS_laser_ ;
+  double NIS_laser_ = {0};
 
   /**
    * Constructor
@@ -127,10 +143,21 @@ private:
 
   void lidarInit(MeasurementPackage & meas_package);
 
+
+  /**
+   * calculate measurement covariance matrix
+   */
+  MatrixXd calculateMeasurementCovarianceMatrix(MatrixXd & sig, VectorXd & pred, MatrixXd & R, int size, bool normalize);
+  
+  /**
+   * calculate cross correlation matrix
+   */
+  MatrixXd calculateCrossCorrelationMatrix(MatrixXd & Zsig, VectorXd & z_pred, int size, bool normalize);
+
   /**
    * Update state mean and covariance matrix
    */
-  void updateState(MatrixXd & Tc, MatrixXd & S, VectorXd & z_diff);
+  void updateState(MatrixXd & Tc, MatrixXd & S, VectorXd & z, VectorXd & z_pred, double * nis, bool normalize);
 
 };
 
