@@ -34,10 +34,8 @@ namespace Tools {
   void normalizeAngles(int i, VectorXd & vect)
   {
     if (vect(i) > M_PI) {
-      std::cout << "1";
       vect(i) -= 2. * M_PI;
     } else if (vect(i) < -M_PI) {
-      std::cout << "0";
       vect(i) += 2. * M_PI;
     }
   }
