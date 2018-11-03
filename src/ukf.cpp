@@ -14,10 +14,10 @@ using std::vector;
  */
 UKF::UKF(bool use_laser, bool use_radar) {
   // if this is false, laser measurements will be ignored (except during init)
-  use_laser_ = use_laser;
+  this->use_laser = use_laser;
 
   // if this is false, radar measurements will be ignored (except during init)
-  use_radar_ = use_radar;
+  this->use_radar = use_radar;
 
   // initial state vector
   x_ = VectorXd(n_x_);
@@ -47,8 +47,8 @@ UKF::~UKF() {}
 
 bool UKF::isSupported(MeasurementPackage & meas_package) 
 {
-  if ( meas_package.sensor_type_ == MeasurementPackage::RADAR ) return use_radar_;
-  if ( meas_package.sensor_type_ == MeasurementPackage::LASER ) return use_laser_;
+  if ( meas_package.sensor_type_ == MeasurementPackage::RADAR ) return use_radar;
+  if ( meas_package.sensor_type_ == MeasurementPackage::LASER ) return use_laser;
   return false;
 }
 
@@ -193,7 +193,7 @@ void UKF::Prediction()
             .5 * delta_t * delta_t * v_yawdd,
             delta_t * v_yawdd;
     
-    //write predicted sigma points into right column
+    // write predicted sigma points into right column
     Xsig_pred_.col(i) << orig + vec1 + vec2;
   }
   
@@ -217,22 +217,32 @@ void UKF::Prediction()
  * @param {MeasurementPackage} meas_package
  */
 void UKF::UpdateLidar(MeasurementPackage & meas_package) {  
+  //create vector for incoming radar measurement
+  VectorXd z = VectorXd(laser_dim);
+  z << meas_package.raw_measurements_(0), //measurements px
+       meas_package.raw_measurements_(1); //measurements py
+
   //create matrix for sigma points in measurement space by 
   //transform sigma points into measurement space
   MatrixXd Zsig = Xsig_pred_.block(0, 0, laser_dim, n_aug_size);
   //calculate mean predicted measurement
   VectorXd z_pred = Zsig * weights_;
-  //measurement covariance matrix S
-  MatrixXd S = calculateMeasurementCovarianceMatrix(Zsig, z_pred, laser_R, laser_dim, false);
+  // calculate measurement covariance matrix S
+  // and create matrix for cross correlation Tc
+  MatrixXd S = MatrixXd(laser_dim, laser_dim);
+  S.fill(0.0);
+  MatrixXd Tc = MatrixXd(n_x_, laser_dim);
+  Tc.fill(0.0);
+  for (int i = 0; i < n_aug_size; ++i) {
+    VectorXd z_diff = Zsig.col(i) - z_pred;
+    VectorXd x_diff = Xsig_pred_.col(i) - x_;
+    Tools::normalizeAngles(3, x_diff);
 
-  //create vector for incoming radar measurement
-  VectorXd z = VectorXd(laser_dim);
-  
-  z << meas_package.raw_measurements_(0), //measurements px
-       meas_package.raw_measurements_(1); //measurements py
-
-  //create matrix for cross correlation Tc
-  MatrixXd Tc = calculateCrossCorrelationMatrix(Zsig, z_pred, laser_dim, false);
+    S += weights_(i) * z_diff * z_diff.transpose();
+    Tc += weights_(i) * x_diff * z_diff.transpose();
+  }
+  // Add R to S
+  S += laser_R;
   updateState(Tc, S, z, z_pred, & NIS_laser_, false);
   //cout<<"NIS laser is "<<NIS_laser_<<endl;
 }
@@ -242,6 +252,12 @@ void UKF::UpdateLidar(MeasurementPackage & meas_package) {
  * @param {MeasurementPackage} meas_package
  */
 void UKF::UpdateRadar(MeasurementPackage & meas_package) {  
+  //create example vector for incoming radar measurement
+  VectorXd z = VectorXd(radar_dim);
+  z << meas_package.raw_measurements_(0), //measurements rho
+       meas_package.raw_measurements_(1), //measurements phi
+       meas_package.raw_measurements_(2);  //measurements rhod
+
   //create matrix for sigma points in measurement space
   MatrixXd Zsig = MatrixXd(radar_dim, n_aug_size);  
   Zsig.fill(0.0);
@@ -264,50 +280,25 @@ void UKF::UpdateRadar(MeasurementPackage & meas_package) {
   //calculate mean predicted measurement
   VectorXd z_pred = Zsig * weights_;
   
-  //measurement covariance matrix S
-  MatrixXd S = calculateMeasurementCovarianceMatrix(Zsig, z_pred, radar_R, radar_dim, true);
-  
-  //create example vector for incoming radar measurement
-  VectorXd z = VectorXd(radar_dim);
-  z << meas_package.raw_measurements_(0), //measurements rho
-       meas_package.raw_measurements_(1), //measurements phi
-       meas_package.raw_measurements_(2);  //measurements rhod
-  
-  //create matrix for cross correlation Tc
-  MatrixXd Tc = calculateCrossCorrelationMatrix(Zsig, z_pred, radar_dim, true);
-  updateState(Tc, S, z, z_pred, &NIS_radar_, true);
-  //cout<<"NIS radar is "<<NIS_radar_<<endl;
-}
-
-MatrixXd UKF::calculateMeasurementCovarianceMatrix(MatrixXd & sig, VectorXd & pred, MatrixXd & R, int size, bool normalize)
-{
-  MatrixXd S = MatrixXd(size, size);
+  // calculate measurement covariance matrix S
+  // and create matrix for cross correlation Tc
+  MatrixXd S = MatrixXd(radar_dim, radar_dim);
   S.fill(0.0);
-  for (int i = 0; i < n_aug_size; ++i) {
-    VectorXd diff = sig.col(i) - pred;
-    //normalize angles
-    if (normalize) Tools::normalizeAngles(1, diff);
-    S += weights_(i) * diff * diff.transpose();
-  }
-  // Add R to S
-  S += R;
-  return S;
-}
-
-MatrixXd UKF::calculateCrossCorrelationMatrix(MatrixXd & Zsig, VectorXd & z_pred, int size, bool normalize) 
-{
-  MatrixXd Tc = MatrixXd(n_x_, size);
+  MatrixXd Tc = MatrixXd(n_x_, radar_dim);
   Tc.fill(0.0);
   for (int i = 0; i < n_aug_size; ++i) {
-    VectorXd x_diff = Xsig_pred_.col(i) - x_;
-    //normalize angles
-    Tools::normalizeAngles(3, x_diff);
     VectorXd z_diff = Zsig.col(i) - z_pred;
-    //normalize angles
-    if (normalize) Tools::normalizeAngles(1, z_diff);
+    VectorXd x_diff = Xsig_pred_.col(i) - x_;
+    Tools::normalizeAngles(3, x_diff);
+    Tools::normalizeAngles(1, z_diff);
+    S += weights_(i) * z_diff * z_diff.transpose();
     Tc += weights_(i) * x_diff * z_diff.transpose();
   }
-  return Tc;
+  // Add R to S
+  S += radar_R;
+
+  updateState(Tc, S, z, z_pred, &NIS_radar_, true);
+  //cout<<"NIS radar is "<<NIS_radar_<<endl;
 }
 
 void UKF::updateState(MatrixXd & Tc, MatrixXd & S, VectorXd & z, VectorXd & z_pred, double * nis, bool normalize) 

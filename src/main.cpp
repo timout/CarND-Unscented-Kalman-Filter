@@ -31,7 +31,7 @@ int main()
   uWS::Hub h;
 
   // Create a Kalman Filter instance
-  UKF ukf;
+  UKF ukf(true, true);
 
   // used to compute the RMSE later
   vector<VectorXd> estimations;

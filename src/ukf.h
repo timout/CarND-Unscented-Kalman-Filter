@@ -71,10 +71,10 @@ private:
   double delta_t;
 
   ///* if this is false, laser measurements will be ignored (except for init)
-  bool use_laser_;
+  bool use_laser;
 
   ///* if this is false, radar measurements will be ignored (except for init)
-  bool use_radar_;
+  bool use_radar;
 
 public:
 
@@ -142,17 +142,6 @@ private:
   void radarInit(MeasurementPackage & meas_package);
 
   void lidarInit(MeasurementPackage & meas_package);
-
-
-  /**
-   * calculate measurement covariance matrix
-   */
-  MatrixXd calculateMeasurementCovarianceMatrix(MatrixXd & sig, VectorXd & pred, MatrixXd & R, int size, bool normalize);
-  
-  /**
-   * calculate cross correlation matrix
-   */
-  MatrixXd calculateCrossCorrelationMatrix(MatrixXd & Zsig, VectorXd & z_pred, int size, bool normalize);
 
   /**
    * Update state mean and covariance matrix
